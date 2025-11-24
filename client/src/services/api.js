@@ -13,7 +13,12 @@ export const registerUser = (data) => api.post('/auth/register', data);
 export const loginUser = (data) => api.post('/auth/login', data);
 export const getUsers = () => api.get('/auth/users');
 export const getProperties = () => api.get('/properties');
+export const getProperty = (id) => api.get(`/properties/${id}`);
 export const createProperty = (data, token) =>
   api.post('/properties', data, { headers: { Authorization: `Bearer ${token}` } });
+export const updateProperty = (id, data, token) =>
+  api.put(`/properties/${id}`, data, { headers: { Authorization: `Bearer ${token}` } });
+export const deleteProperty = (id, token) =>
+  api.delete(`/properties/${id}`, { headers: { Authorization: `Bearer ${token}` } });
 
 export default api;
