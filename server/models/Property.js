@@ -248,11 +248,11 @@ const propertySchema = new mongoose.Schema({
 
 // Pre-save middleware to calculate fields
 propertySchema.pre('save', function(next) {
-  // Calculate price per sqm
+  // Calculate price per sqm and sqft
   if (this.pricing?.price && this.specifications?.builtUpArea) {
     this.calculated = this.calculated || {};
     this.calculated.pricePerSqm = this.pricing.price / this.specifications.builtUpArea;
-    this.calculated.pricePerSqft = this.calculated.pricePerSqm * 0.0929; // sqm to sqft conversion
+    this.calculated.pricePerSqft = this.calculated.pricePerSqm / 10.7639; // 1 sqm = 10.7639 sqft, so price per sqft = price per sqm / 10.7639
   }
 
   // Calculate property age
@@ -270,10 +270,10 @@ propertySchema.pre('save', function(next) {
       .replace(/(^-|-$)/g, '');
   }
 
-  // Generate unique listing ID if not exists
+  // Generate unique listing ID if not exists (using MongoDB ObjectId for uniqueness)
   if (!this.calculated?.uniqueListingId) {
     this.calculated = this.calculated || {};
-    this.calculated.uniqueListingId = 'PROP-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+    this.calculated.uniqueListingId = 'PROP-' + this._id.toString();
   }
 
   // Calculate annual rent from monthly rent
