@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Geocode Existing Properties</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        h1 { color: #333; margin-bottom: 10px; }
+        p { color: #666; line-height: 1.6; }
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            margin: 20px 0;
+        }
+        button:hover { opacity: 0.9; }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        #log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            margin-top: 20px;
+            display: none;
+        }
+        .log-entry { margin: 5px 0; }
+        .success { color: #28a745; }
+        .error { color: #dc3545; }
+        .info { color: #667eea; }
+        .warning { color: #ffc107; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗺️ Geocode Existing Properties</h1>
+        <p>This tool will add map coordinates to all properties that don't have them yet.</p>
+        <p><strong>What it does:</strong></p>
+        <ul>
+            <li>Fetches all properties from your database</li>
+            <li>Skips properties that already have coordinates</li>
+            <li>Uses Mapbox to convert addresses to lat/lng coordinates</li>
+            <li>Updates each property with the coordinates</li>
+        </ul>
+        <p><strong>Note:</strong> Make sure you're logged in before running this.</p>
+        
+        <button id="startBtn" onclick="runGeocode()">Start Geocoding</button>
+        
+        <div id="log"></div>
+    </div>
+
+    <script>
+        const MAPBOX_TOKEN = 'pk.eyJ1IjoiZW1sYWtwcm8iLCJhIjoiY21pZjFkcGxxMDByejNlb3BoZWEycGpoeCJ9.EYd8NFjbIDUiSXbdtyq3Tg';
+        const logDiv = document.getElementById('log');
+        const startBtn = document.getElementById('startBtn');
+
+        function log(message, type = 'info') {
+            logDiv.style.display = 'block';
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = message;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        async function geocodeAddress(address) {
+            try {
+                const encodedAddress = encodeURIComponent(address + ', Baku, Azerbaijan');
+                const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodedAddress}.json?access_token=${MAPBOX_TOKEN}&country=AZ&limit=1`;
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                if (data.features && data.features.length > 0) {
+                    const [lng, lat] = data.features[0].center;
+                    return { lat, lng, latitude: lat, longitude: lng };
+                }
+                return null;
+            } catch (error) {
+                log(`Geocoding error: ${error.message}`, 'error');
+                return null;
+            }
+        }
+
+        async function updatePropertyWithCoordinates(propertyId, coordinates) {
+            const token = localStorage.getItem('token');
+            
+            if (!token) {
+                log('ERROR: Not logged in! Please login first.', 'error');
+                return null;
+            }
+            
+            const response = await fetch(`http://localhost:5000/api/properties/${propertyId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ coordinates })
+            });
+            
+            return response.json();
+        }
+
+        async function runGeocode() {
+            startBtn.disabled = true;
+            startBtn.textContent = 'Running...';
+            logDiv.innerHTML = '';
+            
+            try {
+                // Fetch all properties
+                log('🔍 Fetching properties...', 'info');
+                const response = await fetch('http://localhost:5000/api/properties');
+                const properties = await response.json();
+                
+                log(`Found ${properties.length} properties`, 'success');
+                log('', 'info');
+                
+                let updated = 0;
+                let skipped = 0;
+                let failed = 0;
+                
+                for (const property of properties) {
+                    // Skip if already has coordinates
+                    if (property.coordinates && (property.coordinates.lat || property.coordinates.latitude)) {
+                        log(`✓ ${property.title} - already has coordinates`, 'info');
+                        skipped++;
+                        continue;
+                    }
+                    
+                    const address = property.location || property.fullAddress || `${property.street || ''}, ${property.city || ''}`.trim();
+                    
+                    if (!address || address === ',') {
+                        log(`✗ ${property.title} - no valid address`, 'warning');
+                        failed++;
+                        continue;
+                    }
+                    
+                    log(`🌍 Geocoding: ${property.title} - ${address}`, 'info');
+                    
+                    const coords = await geocodeAddress(address);
+                    
+                    if (coords) {
+                        await updatePropertyWithCoordinates(property._id, coords);
+                        log(`✅ Updated ${property.title} [${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}]`, 'success');
+                        updated++;
+                    } else {
+                        log(`✗ Failed to geocode ${property.title}`, 'error');
+                        failed++;
+                    }
+                    
+                    // Wait 200ms between requests
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                }
+                
+                log('', 'info');
+                log('🎉 Geocoding complete!', 'success');
+                log(`✅ Updated: ${updated}`, 'success');
+                log(`⏭️ Skipped (already had coords): ${skipped}`, 'info');
+                log(`✗ Failed: ${failed}`, failed > 0 ? 'error' : 'info');
+                
+            } catch (error) {
+                log(`FATAL ERROR: ${error.message}`, 'error');
+            }
+            
+            startBtn.disabled = false;
+            startBtn.textContent = 'Run Again';
+        }
+    </script>
+</body>
+</html>

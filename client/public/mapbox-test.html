@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Mapbox Connection Test</title>
+    <script src='https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js'></script>
+    <link href='https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css' rel='stylesheet' />
+    <style>
+        body { margin: 0; padding: 20px; font-family: Arial; }
+        #map { width: 100%; height: 400px; border-radius: 8px; margin: 20px 0; }
+        .status { padding: 15px; border-radius: 8px; margin: 10px 0; }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+    </style>
+</head>
+<body>
+    <h1>🗺️ Mapbox Connection Test</h1>
+    <div id="status"></div>
+    <div id="map"></div>
+
+    <script>
+        const token = 'pk.eyJ1IjoiZW1sYWtwcm8iLCJhIjoiY21pZjFkcGxxMDByejNlb3BoZWEycGpoeCJ9.EYd8NFjbIDUiSXbdtyq3Tg';
+        const statusDiv = document.getElementById('status');
+
+        function addStatus(message, type) {
+            const div = document.createElement('div');
+            div.className = `status ${type}`;
+            div.innerHTML = message;
+            statusDiv.appendChild(div);
+        }
+
+        // Test 1: Token check
+        if (token && token.startsWith('pk.')) {
+            addStatus('✅ Token format is valid (starts with pk.)', 'success');
+        } else {
+            addStatus('❌ Token format is invalid', 'error');
+        }
+
+        // Test 2: Initialize map
+        try {
+            mapboxgl.accessToken = token;
+            addStatus('✅ Token set successfully', 'success');
+
+            const map = new mapboxgl.Map({
+                container: 'map',
+                style: 'mapbox://styles/mapbox/streets-v12',
+                center: [49.8671, 40.4093], // Baku, Azerbaijan
+                zoom: 12
+            });
+
+            map.on('load', () => {
+                addStatus('✅ Map loaded successfully! Connection is working!', 'success');
+                
+                // Add a marker
+                new mapboxgl.Marker({ color: '#667eea' })
+                    .setLngLat([49.8671, 40.4093])
+                    .setPopup(new mapboxgl.Popup().setHTML('<h3>Baku, Azerbaijan</h3><p>Map is working! 🎉</p>'))
+                    .addTo(map);
+            });
+
+            map.on('error', (e) => {
+                addStatus(`❌ Map error: ${e.error.message}`, 'error');
+                console.error('Map error:', e);
+            });
+
+        } catch (error) {
+            addStatus(`❌ Error initializing map: ${error.message}`, 'error');
+            console.error('Init error:', error);
+        }
+    </script>
+</body>
+</html>
